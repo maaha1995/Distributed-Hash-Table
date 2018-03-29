@@ -74,7 +74,6 @@ public class OnTestClickListener implements OnClickListener {
 		
 		protected void onProgressUpdate(String...strings) {
 			mTextView.append(strings[0]);
-
 			return;
 		}
 
