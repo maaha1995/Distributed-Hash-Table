@@ -1,6 +1,7 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
 import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -13,11 +14,15 @@ import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Map;
 
 import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
@@ -39,11 +44,21 @@ public class SimpleDhtProvider extends ContentProvider {
     static final String REMOTE_PORT4 = "11124";
     static final int SERVER_PORT = 10000;
     String[] remotePort = {REMOTE_PORT0, REMOTE_PORT1, REMOTE_PORT2, REMOTE_PORT3, REMOTE_PORT4};
+    String current_port = ""; // 5554
+    String predecessor_port = "";
+    String successor_port = "";
+//    int count=-1;
+
+    ArrayList<Node> nodes = new ArrayList<Node>();
+    Map<String,String> hmap = new HashMap<String, String>();
+
+    ContentResolver contentProvider ;
+
     class Node{
-        String portNumber;
-        String hashValue;
-        String predecessor;
-        String successor;
+        String portNumber; // store the port number e.g. 5554, 5556
+        String hashValue;   // hashed value of port number
+        String predecessor; // pred port number e.g. 5554 etc.
+        String successor;   // succ port number e.g. 5554 etc.
 
         public Node(String portNumber,String hashValue, String predecessor,String successor){
             this.portNumber = portNumber;
@@ -51,12 +66,62 @@ public class SimpleDhtProvider extends ContentProvider {
             this.predecessor = predecessor;
             this.successor = successor;
         }
+    }
+
+    public String dividePortNumBy2(String portNum) {
+        return Integer.toString(Integer.parseInt(portNum) / 2);
+    }
+
+    public void displayArrayList(){
+        StringBuilder alist = new StringBuilder();
+        StringBuilder blist = new StringBuilder();
+        StringBuilder clist = new StringBuilder();
+        for (int i=0;i<nodes.size();i++){
+           alist.append(nodes.get(i).portNumber);
+           alist.append("|");
+           blist.append(nodes.get(i).predecessor);
+           blist.append("|");
+           clist.append(nodes.get(i).successor);
+           clist.append("|");
+
+        }
+       // Log.d("SortedArrayList", alist.toString());
+       // Log.d("Predecessors",blist.toString());
+       // Log.d("Successors",clist.toString());
 
     }
 
-    ArrayList<Node> nodes = new ArrayList<Node>();
-    Map<String,String> hmap = new HashMap<String, String>();
+    public void assignpd(){
+       // Log.d("assignpd","This is called1");
+        if(nodes.size()>=2) {
+           // Log.d("assignpd","This is called2");
+            for (int i = 0; i < nodes.size(); i++) {
 
+                if (i == 0) {
+                    nodes.get(i).successor = nodes.get(i + 1).portNumber;
+                    nodes.get(i).predecessor = nodes.get(nodes.size() - 1).portNumber;
+                } else if (i == nodes.size() - 1) {
+                    nodes.get(i).successor = nodes.get(0).portNumber;
+                    nodes.get(i).predecessor = nodes.get(i - 1).portNumber;
+                } else {
+                    nodes.get(i).successor = nodes.get(i + 1).portNumber;
+                    nodes.get(i).predecessor = nodes.get(i - 1).portNumber;
+                }
+              //  Log.d("assignpd", "just before last if");
+                if (nodes.get(i).portNumber.equals(current_port)) {
+
+                    predecessor_port = nodes.get(i).predecessor;
+                    successor_port = nodes.get(i).successor;
+                    Log.d("assignpd","Current: "+ current_port  +"Pred: " + predecessor_port+ "Succ:" + successor_port);
+                }
+            }
+        }
+
+    }
+
+    public String multiplyPortNumBy2(String portNum){
+        return Integer.toString(Integer.parseInt(portNum) * 2);
+    }
 
 
     @Override
@@ -74,22 +139,51 @@ public class SimpleDhtProvider extends ContentProvider {
     @Override
     public Uri insert(Uri uri, ContentValues values) {
         // TODO Auto-generated method stub
-
-        String filename = (String)values.get("key");
-        String string = (String)values.get("value") + "\n";
         FileOutputStream outputStream;
+        String filename = (String)values.get("key");
+        String string = values.get("value") + "\n";
+        String keyHash ="";
 
         try {
-            outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
-            outputStream.write(string.getBytes());
-            outputStream.close();
-            Log.d("insert_method","File write successful");
-        } catch (Exception e) {
-            Log.e("insert_method", "File write failed");
+            keyHash =  genHash(filename);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+
+        Log.d("CurrentPort: "+ current_port ,"hash_value:" +hmap.get(current_port));
+        Log.d("predecessorPort: "+ predecessor_port ,"hash_value:" +hmap.get(predecessor_port));
+        Log.d("SuccessorPort: "+ successor_port ,"hash_value:" +hmap.get(successor_port));
+        Log.d("Key: "+ filename ,"hash_value:" + keyHash);
+
+        if(((hmap.get(current_port).compareTo(hmap.get(predecessor_port)) > 0 &&
+                keyHash.compareTo(predecessor_port) > 0 &&
+                hmap.get(current_port).compareTo(keyHash) > 0 ) ) ||
+                ((hmap.get(predecessor_port).compareTo(hmap.get(current_port)) > 0) &&
+                        ((keyHash.compareTo(hmap.get(predecessor_port))) > 0||
+                                hmap.get(current_port).compareTo(keyHash) > 0))){
+
+
+            try {
+               // Log.d("NodeID:"+current_port,filename  + string);
+                outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
+                outputStream.write(string.getBytes());
+                outputStream.close();
+                Log.d("insert_method","File write successful");
+            } catch (Exception e) {
+                Log.e("insert_method", "File write failed");
+            }
+            Log.d("Inserted in PortNumber",current_port);
+        }
+
+        else{
+            Log.d("Send2Others:CurPort:"+current_port,filename  + string);
+
+            new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Store", current_port,filename,string);
+
         }
 
         Log.d("Insert","Success");
-        Log.d("insert", values.toString());
+       // Log.d("insert", values.toString());
         return uri;
 
     }
@@ -101,18 +195,22 @@ public class SimpleDhtProvider extends ContentProvider {
         TelephonyManager tel = (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
         String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
         final String myPort = String.valueOf((Integer.parseInt(portStr) * 2));
+        Log.d(TAG,"This port is: " + myPort);
+        current_port = portStr;
 
-        for(int i =0; i<remotePort.length;i++){
+        contentProvider = getContext().getContentResolver();
+
+        for(int i = 0; i < remotePort.length;i++){
             try {
-                String hvalue = genHash(remotePort[i]);
-                hmap.put(remotePort[i],hvalue);
+                String portNum = dividePortNumBy2(remotePort[i]);
+                String hvalue = genHash(portNum);
+                hmap.put(portNum,hvalue);
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
         }
 
-        Node node1 = new Node (myPort, hmap.get(myPort), null, null);
-        nodes.add(node1);
+        displayArrayList();
 
         try {
             ServerSocket serverSocket = new ServerSocket(SERVER_PORT);
@@ -123,12 +221,12 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         try {
-            Thread.sleep(2000);
+            Thread.sleep(6000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, myPort, "Oncreate");
+        new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Oncreate", myPort);
 
         return false;
     }
@@ -152,7 +250,7 @@ public class SimpleDhtProvider extends ContentProvider {
             }
 
         } catch (Exception e) {
-            Log.d("Cursor", "File_reading_failed");
+           // Log.d("Cursor", "File_reading_failed");
         }
 
         String[] matrixColumns = {"key", "value"};
@@ -160,8 +258,8 @@ public class SimpleDhtProvider extends ContentProvider {
         mco.addRow(new Object[]{selection, sb});
         mco.close();
 
-        Log.d("cursor", "added row");
-        Log.v("query", selection);
+       // Log.d("cursor", "added row");
+       // Log.v("query", selection);
         return mco;
     }
 
@@ -183,6 +281,15 @@ public class SimpleDhtProvider extends ContentProvider {
 
     private class ServerTask extends AsyncTask<ServerSocket, String, Void> {
 
+        private Uri buildUri(String scheme, String authority) {
+            Uri.Builder uriBuilder = new Uri.Builder();
+            uriBuilder.authority(authority);
+            uriBuilder.scheme(scheme);
+            return uriBuilder.build();
+        }
+
+        private final Uri mUri = buildUri("content", "edu.buffalo.cse.cse486586.simpledht.provider");
+
         @Override
         protected Void doInBackground(ServerSocket... sockets) {
             ServerSocket serverSocket = sockets[0];
@@ -193,16 +300,38 @@ public class SimpleDhtProvider extends ContentProvider {
 
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     String message = in.readLine();
-                    Log.d("T", message);
+
+                  //  Log.d("SERVER", message);
 
                     String[] result = message.split("#");
+                    Log.d("Server: Result String",Arrays.toString(result));
+
 
                     if(result[2].equals("Oncreate")){
                         Node node1 = new Node (result[1], hmap.get(result[1]), null, null);
                         nodes.add(node1);
+                        Collections.sort(nodes, new Comparator<Node>() {
+                            @Override
+                            public int compare(Node lhs, Node rhs) {
+                                return lhs.hashValue.compareTo(rhs.hashValue);
+                            }
+                        });
+
+                        assignpd();
+                        displayArrayList();
                     }
 
+                    if(result[2].equals("Store")){
 
+                        String key = result[3];
+                        String value = result[4];
+
+//                        count++;
+                        ContentValues contentValues1 = new ContentValues();
+                        contentValues1.put("key", key);
+                        contentValues1.put("value", value);
+                        contentProvider.insert(mUri,contentValues1);
+                    }
 
                     in.close();
                     socket.close();
@@ -216,32 +345,55 @@ public class SimpleDhtProvider extends ContentProvider {
 
 
     }
+
     private class ClientTask extends AsyncTask<String, Void, Void> {
 
         @Override
         protected Void doInBackground(String... msgs) {
             try {
-                Log.d(TAG, "Reached ClientTask Method1");
+                Log.d("ClientTask", "Reached ClientTask Method " + Arrays.toString(msgs));
 
-                if(msgs[1]=="Oncreate"){
+                if(msgs[0].equals("Oncreate")){
                     for (int i = 0; i < remotePort.length; i++) {
+                   //     Log.d("Client",remotePort[i]);
+//                        if (msgs[1].equals(remotePort[i])) {
+//                            Log.d("here","here!!!");
+////                            continue;
+//                        }
+//                        else {
+                     //       Log.d("Sending to port:", remotePort[i]);
+                            Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                    Integer.parseInt(remotePort[i]));
 
-                        Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                Integer.parseInt(remotePort[i]));
+                            //First#5554#Oncreate
+                            String msgToSend = "First#" + dividePortNumBy2(msgs[1]) + "#Oncreate";
 
-                        String msgToSend = "First#"+remotePort[i]+"#Oncreate";
-
-                        PrintWriter out =
-                                new PrintWriter(socket.getOutputStream(), true);
-                        out.write(msgToSend);
-                        out.flush();
-//                    out.close();
-                        socket.close();
+                            DataOutputStream out =
+                                    new DataOutputStream(socket.getOutputStream());
+                            out.writeBytes(msgToSend+"\n");
+                            out.flush();
+                            out.close();
+                            socket.close();
+//                        }
                     }
                 }
 
+                if(msgs[0].equals("Store")) {
+
+                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                            Integer.parseInt(multiplyPortNumBy2(successor_port)));
+
+                    String msgToSend = "Second#" + msgs[1] + "#Store" + "#" + msgs[2] +"#" +msgs[3];
+
+                    DataOutputStream out =
+                            new DataOutputStream(socket.getOutputStream());
+                    out.writeBytes(msgToSend+"\n");
+                    out.flush();
+                    out.close();
+                    socket.close();
 
 
+                }
 
             } catch(UnknownHostException e){
                 Log.e(TAG, "ClientTask UnknownHostException");
