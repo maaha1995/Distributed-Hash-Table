@@ -47,7 +47,7 @@ public class SimpleDhtProvider extends ContentProvider {
     String current_port = ""; // 5554
     String predecessor_port = "";
     String successor_port = "";
-//    int count=-1;
+
 
     ArrayList<Node> nodes = new ArrayList<Node>();
     Map<String,String> hmap = new HashMap<String, String>();
@@ -72,6 +72,10 @@ public class SimpleDhtProvider extends ContentProvider {
         return Integer.toString(Integer.parseInt(portNum) / 2);
     }
 
+    public String multiplyPortNumBy2(String portNum){
+        return Integer.toString(Integer.parseInt(portNum) * 2);
+    }
+
     public void displayArrayList(){
         StringBuilder alist = new StringBuilder();
         StringBuilder blist = new StringBuilder();
@@ -93,6 +97,14 @@ public class SimpleDhtProvider extends ContentProvider {
 
     public void assignpd(){
        // Log.d("assignpd","This is called1");
+        if(nodes.size()==1){
+            nodes.get(0).successor = nodes.get(0).portNumber;
+            nodes.get(0).predecessor = nodes.get(0).portNumber;
+
+            predecessor_port = nodes.get(0).predecessor;
+            successor_port = nodes.get(0).successor;
+        }
+
         if(nodes.size()>=2) {
            // Log.d("assignpd","This is called2");
             for (int i = 0; i < nodes.size(); i++) {
@@ -119,11 +131,6 @@ public class SimpleDhtProvider extends ContentProvider {
 
     }
 
-    public String multiplyPortNumBy2(String portNum){
-        return Integer.toString(Integer.parseInt(portNum) * 2);
-    }
-
-
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         // TODO Auto-generated method stub
@@ -138,8 +145,9 @@ public class SimpleDhtProvider extends ContentProvider {
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
-        // TODO Auto-generated method stub
         FileOutputStream outputStream;
+        Log.d("Insert","Method Called");
+
         String filename = (String)values.get("key");
         String string = values.get("value") + "\n";
         String keyHash ="";
@@ -155,12 +163,30 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.d("SuccessorPort: "+ successor_port ,"hash_value:" +hmap.get(successor_port));
         Log.d("Key: "+ filename ,"hash_value:" + keyHash);
 
-        if(((hmap.get(current_port).compareTo(hmap.get(predecessor_port)) > 0 &&
-                keyHash.compareTo(predecessor_port) > 0 &&
-                hmap.get(current_port).compareTo(keyHash) > 0 ) ) ||
-                ((hmap.get(predecessor_port).compareTo(hmap.get(current_port)) > 0) &&
-                        ((keyHash.compareTo(hmap.get(predecessor_port))) > 0||
-                                hmap.get(current_port).compareTo(keyHash) > 0))){
+
+        if(nodes.size()==1){
+
+            try {
+                // Log.d("NodeID:"+current_port,filename  + string);
+                outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
+                outputStream.write(string.getBytes());
+                outputStream.close();
+                Log.d("insert_method","File write successful in current Node");
+            } catch (Exception e) {
+                Log.e("insert_method", "File write failed");
+            }
+
+        }
+
+        String cpHash = hmap.get(current_port);
+        String predHash = hmap.get(predecessor_port);
+
+        if((cpHash.compareTo(predHash) > 0 &&
+                keyHash.compareTo(predHash) > 0 &&
+                cpHash.compareTo(keyHash) > 0) ||
+                ((predHash.compareTo(cpHash) > 0) &&
+                        (keyHash.compareTo(predHash) > 0||
+                                cpHash.compareTo(keyHash) > 0))){
 
 
             try {
@@ -168,7 +194,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
                 outputStream.write(string.getBytes());
                 outputStream.close();
-                Log.d("insert_method","File write successful");
+                Log.d("insert_method","File write successful in current Node");
             } catch (Exception e) {
                 Log.e("insert_method", "File write failed");
             }
@@ -182,7 +208,7 @@ public class SimpleDhtProvider extends ContentProvider {
 
         }
 
-        Log.d("Insert","Success");
+       // Log.d("Insert","Success");
        // Log.d("insert", values.toString());
         return uri;
 
@@ -190,7 +216,6 @@ public class SimpleDhtProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        // TODO Auto-generated method stub
 
         TelephonyManager tel = (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
         String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
@@ -227,6 +252,12 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Oncreate", myPort);
+
+        try {
+            Thread.sleep(4000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         return false;
     }
@@ -326,7 +357,6 @@ public class SimpleDhtProvider extends ContentProvider {
                         String key = result[3];
                         String value = result[4];
 
-//                        count++;
                         ContentValues contentValues1 = new ContentValues();
                         contentValues1.put("key", key);
                         contentValues1.put("value", value);
@@ -391,8 +421,6 @@ public class SimpleDhtProvider extends ContentProvider {
                     out.flush();
                     out.close();
                     socket.close();
-
-
                 }
 
             } catch(UnknownHostException e){
