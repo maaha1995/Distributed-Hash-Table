@@ -63,11 +63,16 @@ public class OnTestClickListener implements OnClickListener {
 				return null;
 			}
 
-//			if (testQuery()) {
-//				publishProgress("Query success\n");
-//			} else {
-//				publishProgress("Query fail\n");
-//			}
+			try {
+				Thread.sleep(2000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			if (testQuery()) {
+				publishProgress("Query success\n");
+			} else {
+				publishProgress("Query fail\n");
+			}
 			
 			return null;
 		}
@@ -79,7 +84,7 @@ public class OnTestClickListener implements OnClickListener {
 
 		private boolean testInsert() {
 			try {
-				for (int i = 3; i < TEST_CNT; i++) {
+				for (int i = 0; i < TEST_CNT; i++) {
 					mContentResolver.insert(mUri, mContentValues[i]);
 				}
 			} catch (Exception e) {
@@ -95,9 +100,10 @@ public class OnTestClickListener implements OnClickListener {
 				for (int i = 0; i < TEST_CNT; i++) {
 					String key = (String) mContentValues[i].get(KEY_FIELD);
 					String val = (String) mContentValues[i].get(VALUE_FIELD);
-
+					Log.d("testQuery","calling");
 					Cursor resultCursor = mContentResolver.query(mUri, null,
 							key, null, null);
+					Log.d("testQuery","reached");
 					if (resultCursor == null) {
 						Log.e(TAG, "Result null");
 						throw new Exception();

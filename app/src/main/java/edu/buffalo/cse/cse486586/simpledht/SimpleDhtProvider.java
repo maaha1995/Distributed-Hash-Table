@@ -20,6 +20,8 @@ import java.util.Comparator;
 import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 import android.content.ContentProvider;
 import android.content.ContentResolver;
@@ -47,6 +49,7 @@ public class SimpleDhtProvider extends ContentProvider {
     String current_port = ""; // 5554
     String predecessor_port = "";
     String successor_port = "";
+    BlockingQueue<String> queue;
 
 
     ArrayList<Node> nodes = new ArrayList<Node>();
@@ -149,7 +152,7 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.d("Insert","Method Called");
 
         String filename = (String)values.get("key");
-        String string = values.get("value") + "\n";
+        String string = (String) values.get("value");
         String keyHash ="";
 
         try {
@@ -164,29 +167,29 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.d("Key: "+ filename ,"hash_value:" + keyHash);
 
 
-        if(nodes.size()==1){
-
-            try {
-                // Log.d("NodeID:"+current_port,filename  + string);
-                outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
-                outputStream.write(string.getBytes());
-                outputStream.close();
-                Log.d("insert_method","File write successful in current Node");
-            } catch (Exception e) {
-                Log.e("insert_method", "File write failed");
-            }
-
-        }
+//        if(nodes.size()==1){
+//
+//            try {
+//                // Log.d("NodeID:"+current_port,filename  + string);
+//                outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
+//                outputStream.write(string.getBytes());
+//                outputStream.close();
+//                Log.d("insert_method","File write successful in current Node");
+//            } catch (Exception e) {
+//                Log.e("insert_method", "File write failed");
+//            }
+//
+//        }
 
         String cpHash = hmap.get(current_port);
         String predHash = hmap.get(predecessor_port);
 
-        if((cpHash.compareTo(predHash) > 0 &&
+        if(nodes.size()==1 || ((cpHash.compareTo(predHash) > 0 &&
                 keyHash.compareTo(predHash) > 0 &&
                 cpHash.compareTo(keyHash) > 0) ||
                 ((predHash.compareTo(cpHash) > 0) &&
                         (keyHash.compareTo(predHash) > 0||
-                                cpHash.compareTo(keyHash) > 0))){
+                                cpHash.compareTo(keyHash) > 0)))){
 
 
             try {
@@ -265,33 +268,122 @@ public class SimpleDhtProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        // TODO Auto-generated method stub
+      Log.d("Query","Reached the method");
 
-        StringBuilder sb = null;
+        String cpHash = hmap.get(current_port);
+        String predHash = hmap.get(predecessor_port);
+        String keyHash ="";
+        StringBuilder sb;
+
         try {
-
-            FileInputStream input = getContext().openFileInput(selection);
-            InputStreamReader input_reader = new InputStreamReader(input);
-            BufferedReader br = new BufferedReader(input_reader);
-            sb = new StringBuilder();
-            String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line);
-
-            }
-
-        } catch (Exception e) {
-           // Log.d("Cursor", "File_reading_failed");
+            keyHash =  genHash(selection);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
         }
 
-        String[] matrixColumns = {"key", "value"};
-        MatrixCursor mco = new MatrixCursor(matrixColumns);
-        mco.addRow(new Object[]{selection, sb});
-        mco.close();
+        if(nodes.size()==1){
+            Log.d("Query","Node Size1");
+            sb = new StringBuilder();
+            try {
 
-       // Log.d("cursor", "added row");
+                FileInputStream input = getContext().openFileInput(selection);
+                InputStreamReader input_reader = new InputStreamReader(input);
+                BufferedReader br = new BufferedReader(input_reader);
+
+                String line;
+                while ((line = br.readLine()) != null) {
+                    sb.append(line);
+
+                }
+
+            } catch (Exception e) {
+                // Log.d("Cursor", "File_reading_failed");
+            }
+
+            String[] matrixColumns = {"key", "value"};
+            MatrixCursor mco = new MatrixCursor(matrixColumns);
+            mco.addRow(new Object[]{selection, sb.toString()});
+            mco.close();
+            return mco;
+
+        }
+
+        else {
+            if (((cpHash.compareTo(predHash) > 0 &&
+                    keyHash.compareTo(predHash) > 0 &&
+                    cpHash.compareTo(keyHash) > 0) ||
+                    ((predHash.compareTo(cpHash) > 0) &&
+                            (keyHash.compareTo(predHash) > 0 ||
+                                    cpHash.compareTo(keyHash) > 0)))) {
+
+                Log.d("Query", "Reached 1st if block");
+                sb = new StringBuilder();
+                try {
+
+                    FileInputStream input = getContext().openFileInput(selection);
+                    InputStreamReader input_reader = new InputStreamReader(input);
+                    BufferedReader br = new BufferedReader(input_reader);
+
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line);
+                    }
+
+                } catch (Exception e) {
+                    // Log.d("Cursor", "File_reading_failed");
+                }
+
+                if (selectionArgs == null) {
+                    Log.d("Query", "Condition1");
+
+                    String[] matrixColumns = {"key", "value"};
+                    MatrixCursor mco = new MatrixCursor(matrixColumns);
+                    mco.addRow(new Object[]{selection, sb.toString()});
+                    Log.d("Query", "Condition1 : key: " + selection + " " + sb.toString() + " end");
+                    mco.close();
+                    return mco;
+
+                } else {
+                    Log.d("Query", "Condition2" + "Selection args:" + selectionArgs[0]);
+                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "QueryResult", selectionArgs[0], sb.toString());
+                    return null;
+                }
+            }
+
+            else {
+                Log.d("Condition3","CP:" + current_port);
+                if (selectionArgs == null) {
+                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Query", current_port, selection);
+                    Log.d("Query", "Condition3  : Before Blocking Queue");
+                    queue = new ArrayBlockingQueue<String>(1);
+                    String ans = null;
+                    sb = new StringBuilder();
+                    try {
+                        ans = queue.take();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    Log.d("Query", "Condition3  : After Blocking Queue:ans "+ans);
+                    sb.append(ans);
+
+                    String[] matrixColumns = {"key", "value"};
+                    MatrixCursor mco = new MatrixCursor(matrixColumns);
+                    mco.addRow(new Object[]{selection, sb.toString()});
+                    mco.close();
+
+                    return mco;
+
+                } else {
+                    Log.d("Query", "Condition4");
+                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Query", selectionArgs[0], selection);
+                    return null;
+                }
+            }
+        }
+
+        // Log.d("cursor", "added row");
        // Log.v("query", selection);
-        return mco;
+
     }
 
     @Override
@@ -338,6 +430,7 @@ public class SimpleDhtProvider extends ContentProvider {
                     Log.d("Server: Result String",Arrays.toString(result));
 
 
+
                     if(result[2].equals("Oncreate")){
                         Node node1 = new Node (result[1], hmap.get(result[1]), null, null);
                         nodes.add(node1);
@@ -354,13 +447,34 @@ public class SimpleDhtProvider extends ContentProvider {
 
                     if(result[2].equals("Store")){
 
-                        String key = result[3];
-                        String value = result[4];
+                        String key = result[0];
+                        String value = result[1];
 
                         ContentValues contentValues1 = new ContentValues();
                         contentValues1.put("key", key);
                         contentValues1.put("value", value);
                         contentProvider.insert(mUri,contentValues1);
+                    }
+
+                    if(result[2].equals("Query")){
+
+                        Log.d("ServerQuery","ResultArray"+Arrays.toString(result));
+                        String[] portnum = new String[1];
+                        portnum[0] = result[0];
+
+                        String key = result[1];
+
+                        contentProvider.query(mUri, null,
+                                key, portnum, null);
+                    }
+
+                    if(result[2].equals("QueryResult")){
+                        String msgString = result[1];
+                        try {
+                            queue.put(msgString);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
 
                     in.close();
@@ -412,15 +526,45 @@ public class SimpleDhtProvider extends ContentProvider {
 
                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                             Integer.parseInt(multiplyPortNumBy2(successor_port)));
-
-                    String msgToSend = "Second#" + msgs[1] + "#Store" + "#" + msgs[2] +"#" +msgs[3];
-
+                    //
+                    String msgToSend = msgs[2] +"#" + msgs[3] + "#" + "Store";
+                    Log.d("Client-Store",msgToSend);
                     DataOutputStream out =
                             new DataOutputStream(socket.getOutputStream());
                     out.writeBytes(msgToSend+"\n");
                     out.flush();
                     out.close();
                     socket.close();
+                }
+
+                if(msgs[0].equals("Query")){
+                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                            Integer.parseInt(multiplyPortNumBy2(successor_port)));
+
+
+                    String msgToSend = msgs[1] + "#" + msgs[2] + "#" + "Query";
+                    Log.d("Client-Query",msgToSend);
+                    DataOutputStream out =
+                            new DataOutputStream(socket.getOutputStream());
+                    out.writeBytes(msgToSend+"\n");
+                    out.flush();
+                    out.close();
+                    socket.close();
+                }
+
+                if(msgs[0].equals("QueryResult")){
+                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                            Integer.parseInt(multiplyPortNumBy2(msgs[1])));
+
+                    String msgToSend = "Fourth#" +  msgs[2] +"#QueryResult";
+                    Log.d("Client-QueryResult",msgToSend);
+                    DataOutputStream out =
+                            new DataOutputStream(socket.getOutputStream());
+                    out.writeBytes(msgToSend+"\n");
+                    out.flush();
+                    out.close();
+                    socket.close();
+
                 }
 
             } catch(UnknownHostException e){
