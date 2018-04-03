@@ -2,7 +2,9 @@ package edu.buffalo.cse.cse486586.simpledht;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -50,7 +52,7 @@ public class SimpleDhtProvider extends ContentProvider {
     String predecessor_port = "";
     String successor_port = "";
     BlockingQueue<String> queue;
-
+    BlockingQueue<String> queue2;
 
     ArrayList<Node> nodes = new ArrayList<Node>();
     Map<String,String> hmap = new HashMap<String, String>();
@@ -249,7 +251,7 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         try {
-            Thread.sleep(6000);
+            Thread.sleep(4000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -268,7 +270,7 @@ public class SimpleDhtProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-      Log.d("Query","Reached the method");
+        Log.d("Query","Reached the method");
 
         String cpHash = hmap.get(current_port);
         String predHash = hmap.get(predecessor_port);
@@ -281,42 +283,119 @@ public class SimpleDhtProvider extends ContentProvider {
             e.printStackTrace();
         }
 
-        if(nodes.size()==1){
-            Log.d("Query","Node Size1");
-            sb = new StringBuilder();
-            try {
-
-                FileInputStream input = getContext().openFileInput(selection);
-                InputStreamReader input_reader = new InputStreamReader(input);
-                BufferedReader br = new BufferedReader(input_reader);
-
-                String line;
-                while ((line = br.readLine()) != null) {
-                    sb.append(line);
-
-                }
-
-            } catch (Exception e) {
-                // Log.d("Cursor", "File_reading_failed");
-            }
-
+        if (selection.equals("@")){
+            File f = getContext().getFilesDir();
+            File[] folderList = f.listFiles();
+            Log.d("TT", Arrays.toString(folderList));
             String[] matrixColumns = {"key", "value"};
-            MatrixCursor mco = new MatrixCursor(matrixColumns);
-            mco.addRow(new Object[]{selection, sb.toString()});
+            MatrixCursor mco= new MatrixCursor(matrixColumns);
+
+            if (folderList != null) {
+                for (File file : folderList) {
+                    Log.d("Query@", "File is: " + file.getName());
+                    sb = new StringBuilder();
+
+                    try {
+                        FileInputStream input = getContext().openFileInput(file.getName());
+                        InputStreamReader input_reader = new InputStreamReader(input);
+                        BufferedReader br = new BufferedReader(input_reader);
+
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            sb.append(line);
+                        }
+
+                        mco.addRow(new Object[]{file.getName(), sb.toString()});
+//                        mco.close();
+
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            Log.d("Query - Reached @", f.toString());
             mco.close();
             return mco;
-
         }
 
-        else {
-            if (((cpHash.compareTo(predHash) > 0 &&
-                    keyHash.compareTo(predHash) > 0 &&
-                    cpHash.compareTo(keyHash) > 0) ||
-                    ((predHash.compareTo(cpHash) > 0) &&
-                            (keyHash.compareTo(predHash) > 0 ||
-                                    cpHash.compareTo(keyHash) > 0)))) {
+        else if (selection.equals("*")){
 
-                Log.d("Query", "Reached 1st if block");
+            if(nodes.size()==1){
+                File f = getContext().getFilesDir();
+                File[] folderList = f.listFiles();
+                Log.d("TT", Arrays.toString(folderList));
+                String[] matrixColumns = {"key", "value"};
+                MatrixCursor mco= new MatrixCursor(matrixColumns);
+
+                if (folderList != null) {
+                    for (File file : folderList) {
+                        Log.d("Query@", "File is: " + file.getName());
+                        sb = new StringBuilder();
+
+                        try {
+                            FileInputStream input = getContext().openFileInput(file.getName());
+                            InputStreamReader input_reader = new InputStreamReader(input);
+                            BufferedReader br = new BufferedReader(input_reader);
+
+                            String line;
+                            while ((line = br.readLine()) != null) {
+                                sb.append(line);
+                            }
+
+                            mco.addRow(new Object[]{file.getName(), sb.toString()});
+
+
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+                mco.close();
+                return mco;
+
+            }
+            else {
+
+
+                sb = new StringBuilder();
+                String ans = null;
+
+                new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "QueryforAll", current_port);
+
+                queue2 = new ArrayBlockingQueue<String>(1);
+
+                try {
+                    ans = queue2.take();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                sb.append(ans);
+
+                String[] longString = ans.split("#");
+
+                String[] matrixColumns = {"key", "value"};
+                MatrixCursor mco = new MatrixCursor(matrixColumns);
+
+                for (int i = 0; i < longString.length - 1; i = i + 2) {
+                    mco.addRow(new Object[]{longString[i], longString[i + 1]});
+                }
+
+                mco.close();
+                return mco;
+
+            }
+
+        }
+        else {
+
+
+            if (nodes.size() == 1) {
+                Log.d("Query", "Node Size1");
                 sb = new StringBuilder();
                 try {
 
@@ -327,58 +406,90 @@ public class SimpleDhtProvider extends ContentProvider {
                     String line;
                     while ((line = br.readLine()) != null) {
                         sb.append(line);
+
                     }
 
                 } catch (Exception e) {
                     // Log.d("Cursor", "File_reading_failed");
                 }
 
-                if (selectionArgs == null) {
-                    Log.d("Query", "Condition1");
+                String[] matrixColumns = {"key", "value"};
+                MatrixCursor mco = new MatrixCursor(matrixColumns);
+                mco.addRow(new Object[]{selection, sb.toString()});
+                mco.close();
+                return mco;
 
-                    String[] matrixColumns = {"key", "value"};
-                    MatrixCursor mco = new MatrixCursor(matrixColumns);
-                    mco.addRow(new Object[]{selection, sb.toString()});
-                    Log.d("Query", "Condition1 : key: " + selection + " " + sb.toString() + " end");
-                    mco.close();
-                    return mco;
+            } else {
+                if (((cpHash.compareTo(predHash) > 0 &&
+                        keyHash.compareTo(predHash) > 0 &&
+                        cpHash.compareTo(keyHash) > 0) ||
+                        ((predHash.compareTo(cpHash) > 0) &&
+                                (keyHash.compareTo(predHash) > 0 ||
+                                        cpHash.compareTo(keyHash) > 0)))) {
 
-                } else {
-                    Log.d("Query", "Condition2" + "Selection args:" + selectionArgs[0]);
-                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "QueryResult", selectionArgs[0], sb.toString());
-                    return null;
-                }
-            }
-
-            else {
-                Log.d("Condition3","CP:" + current_port);
-                if (selectionArgs == null) {
-                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Query", current_port, selection);
-                    Log.d("Query", "Condition3  : Before Blocking Queue");
-                    queue = new ArrayBlockingQueue<String>(1);
-                    String ans = null;
+                    Log.d("Query", "Reached 1st if block");
                     sb = new StringBuilder();
                     try {
-                        ans = queue.take();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+
+                        FileInputStream input = getContext().openFileInput(selection);
+                        InputStreamReader input_reader = new InputStreamReader(input);
+                        BufferedReader br = new BufferedReader(input_reader);
+
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            sb.append(line);
+                        }
+
+                    } catch (Exception e) {
+                        // Log.d("Cursor", "File_reading_failed");
                     }
-                    Log.d("Query", "Condition3  : After Blocking Queue:ans "+ans);
-                    sb.append(ans);
 
-                    String[] matrixColumns = {"key", "value"};
-                    MatrixCursor mco = new MatrixCursor(matrixColumns);
-                    mco.addRow(new Object[]{selection, sb.toString()});
-                    mco.close();
+                    if (selectionArgs == null) {
+                        Log.d("Query", "Condition1");
 
-                    return mco;
+                        String[] matrixColumns = {"key", "value"};
+                        MatrixCursor mco = new MatrixCursor(matrixColumns);
+                        mco.addRow(new Object[]{selection, sb.toString()});
+                        Log.d("Query", "Condition1 : key: " + selection + " " + sb.toString() + " end");
+                        mco.close();
+                        return mco;
 
+                    } else {
+                        Log.d("Query", "Condition2" + "Selection args:" + selectionArgs[0]);
+                        new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "QueryResult", selectionArgs[0], sb.toString());
+                        return null;
+                    }
                 } else {
-                    Log.d("Query", "Condition4");
-                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Query", selectionArgs[0], selection);
-                    return null;
+                    Log.d("Condition3", "CP:" + current_port);
+                    if (selectionArgs == null) {
+                        new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Query", current_port, selection);
+                        Log.d("Query", "Condition3  : Before Blocking Queue");
+                        queue = new ArrayBlockingQueue<String>(1);
+                        String ans = null;
+                        sb = new StringBuilder();
+                        try {
+                            ans = queue.take();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        Log.d("Query", "Condition3  : After Blocking Queue:ans " + ans);
+                        sb.append(ans);
+
+                        String[] matrixColumns = {"key", "value"};
+                        MatrixCursor mco = new MatrixCursor(matrixColumns);
+                        mco.addRow(new Object[]{selection, sb.toString()});
+                        mco.close();
+
+                        return mco;
+
+                    } else {
+                        Log.d("Query", "Condition4");
+                        new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Query", selectionArgs[0], selection);
+                        return null;
+                    }
                 }
             }
+
         }
 
         // Log.d("cursor", "added row");
@@ -429,8 +540,6 @@ public class SimpleDhtProvider extends ContentProvider {
                     String[] result = message.split("#");
                     Log.d("Server: Result String",Arrays.toString(result));
 
-
-
                     if(result[2].equals("Oncreate")){
                         Node node1 = new Node (result[1], hmap.get(result[1]), null, null);
                         nodes.add(node1);
@@ -477,7 +586,46 @@ public class SimpleDhtProvider extends ContentProvider {
                         }
                     }
 
-                    in.close();
+                    if(result[2].equals("QueryforAll")){
+
+                        StringBuilder sb = new StringBuilder();
+
+                        File f = getContext().getFilesDir();
+                        File[] folderList = f.listFiles();
+
+                        if (folderList != null) {
+                            for (File file : folderList) {
+
+                                try {
+                                    FileInputStream input = getContext().openFileInput(file.getName());
+                                    InputStreamReader input_reader = new InputStreamReader(input);
+                                    BufferedReader br = new BufferedReader(input_reader);
+
+                                    String line;
+
+                                    while ((line = br.readLine()) != null) {
+                                        sb.append(file.getName());
+                                        sb.append('#');
+                                        sb.append(line);
+                                        sb.append('#');
+
+                                    }
+
+                                } catch (FileNotFoundException e) {
+                                    e.printStackTrace();
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        }
+
+                        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                        out.writeBytes(sb.toString()+"\n");
+                        out.flush();
+
+                    }
+
+                   // in.close();
                     socket.close();
                 }
             }
@@ -567,6 +715,41 @@ public class SimpleDhtProvider extends ContentProvider {
 
                 }
 
+                if(msgs[0].equals("QueryforAll")){
+
+                    StringBuilder sbfinal = new StringBuilder();
+
+                    for(int i=0; i<nodes.size(); i++){
+
+                        Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                Integer.parseInt(multiplyPortNumBy2(nodes.get(i).portNumber)));
+
+                        String msgToSend = "Fifth#" +  current_port +"#QueryforAll";
+
+                        DataOutputStream out =
+                                new DataOutputStream(socket.getOutputStream());
+                        out.writeBytes(msgToSend+"\n");
+                        out.flush();
+                        //out.close();
+
+                        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                        String rec_string = in.readLine();
+
+                        sbfinal.append(rec_string);
+                        in.close();
+                        socket.close();
+
+                    }
+
+                    try {
+                        queue2.put(sbfinal.toString());
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+
+                }
+
             } catch(UnknownHostException e){
                 Log.e(TAG, "ClientTask UnknownHostException");
             } catch(IOException e){
@@ -577,3 +760,6 @@ public class SimpleDhtProvider extends ContentProvider {
         }
     }
 }
+
+
+

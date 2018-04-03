@@ -63,11 +63,11 @@ public class OnTestClickListener implements OnClickListener {
 				return null;
 			}
 
-			try {
-				Thread.sleep(2000);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+//			try {
+//				Thread.sleep(2000);
+//			} catch (InterruptedException e) {
+//				e.printStackTrace();
+//			}
 			if (testQuery()) {
 				publishProgress("Query success\n");
 			} else {
@@ -132,7 +132,7 @@ public class OnTestClickListener implements OnClickListener {
 						resultCursor.close();
 						throw new Exception();
 					}
-
+					Log.d("Query-test","Query Successful");
 					resultCursor.close();
 				}
 			} catch (Exception e) {
