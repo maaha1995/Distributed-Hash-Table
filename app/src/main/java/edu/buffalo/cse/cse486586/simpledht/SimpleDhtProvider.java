@@ -168,21 +168,6 @@ public class SimpleDhtProvider extends ContentProvider {
         Log.d("SuccessorPort: "+ successor_port ,"hash_value:" +hmap.get(successor_port));
         Log.d("Key: "+ filename ,"hash_value:" + keyHash);
 
-
-//        if(nodes.size()==1){
-//
-//            try {
-//                // Log.d("NodeID:"+current_port,filename  + string);
-//                outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
-//                outputStream.write(string.getBytes());
-//                outputStream.close();
-//                Log.d("insert_method","File write successful in current Node");
-//            } catch (Exception e) {
-//                Log.e("insert_method", "File write failed");
-//            }
-//
-//        }
-
         String cpHash = hmap.get(current_port);
         String predHash = hmap.get(predecessor_port);
 
@@ -251,7 +236,7 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         try {
-            Thread.sleep(4000);
+            Thread.sleep(6000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -647,17 +632,10 @@ public class SimpleDhtProvider extends ContentProvider {
 
                 if(msgs[0].equals("Oncreate")){
                     for (int i = 0; i < remotePort.length; i++) {
-                   //     Log.d("Client",remotePort[i]);
-//                        if (msgs[1].equals(remotePort[i])) {
-//                            Log.d("here","here!!!");
-////                            continue;
-//                        }
-//                        else {
-                     //       Log.d("Sending to port:", remotePort[i]);
+
                             Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                                     Integer.parseInt(remotePort[i]));
 
-                            //First#5554#Oncreate
                             String msgToSend = "First#" + dividePortNumBy2(msgs[1]) + "#Oncreate";
 
                             DataOutputStream out =
@@ -666,7 +644,6 @@ public class SimpleDhtProvider extends ContentProvider {
                             out.flush();
                             out.close();
                             socket.close();
-//                        }
                     }
                 }
 
@@ -746,7 +723,6 @@ public class SimpleDhtProvider extends ContentProvider {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-
 
                 }
 

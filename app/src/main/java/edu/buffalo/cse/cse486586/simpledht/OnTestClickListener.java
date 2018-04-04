@@ -13,7 +13,7 @@ import android.widget.TextView;
 public class OnTestClickListener implements OnClickListener {
 
 	private static final String TAG = OnTestClickListener.class.getName();
-	private static final int TEST_CNT = 50;
+	private static final int TEST_CNT = 1;
 	private static final String KEY_FIELD = "key";
 	private static final String VALUE_FIELD = "value";
 
@@ -63,11 +63,11 @@ public class OnTestClickListener implements OnClickListener {
 				return null;
 			}
 
-//			try {
-//				Thread.sleep(2000);
-//			} catch (InterruptedException e) {
-//				e.printStackTrace();
-//			}
+			try {
+				Thread.sleep(2000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 			if (testQuery()) {
 				publishProgress("Query success\n");
 			} else {
