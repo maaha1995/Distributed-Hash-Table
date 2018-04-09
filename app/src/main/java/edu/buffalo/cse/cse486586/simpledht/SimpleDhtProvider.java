@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Formatter;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -55,7 +57,8 @@ public class SimpleDhtProvider extends ContentProvider {
     BlockingQueue<String> queue2;
 
     ArrayList<Node> nodes = new ArrayList<Node>();
-    Map<String,String> hmap = new HashMap<String, String>();
+    HashSet<String> hashSet = new HashSet<String>();
+    //Map<String,String> hmap = new HashMap<String, String>();
 
     ContentResolver contentProvider ;
 
@@ -100,6 +103,27 @@ public class SimpleDhtProvider extends ContentProvider {
 
     }
 
+    public void addtoArrListandhashSet(String port){
+        String hash_value = "";
+        try {
+            hash_value = genHash(port);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+
+        Node nodef = new Node (port, hash_value, null, null);
+        nodes.add(nodef);
+        hashSet.add(port);
+        Collections.sort(nodes, new Comparator<Node>() {
+            @Override
+            public int compare(Node lhs, Node rhs) {
+                return lhs.hashValue.compareTo(rhs.hashValue);
+            }
+        });
+
+        assignpd();
+    }
+
     public void assignpd(){
        // Log.d("assignpd","This is called1");
         if(nodes.size()==1){
@@ -138,7 +162,112 @@ public class SimpleDhtProvider extends ContentProvider {
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
-        // TODO Auto-generated method stub
+        Log.d("Delete","Reached the method");
+
+        String keyHash ="";
+        String currentHash = "";
+        String pdHash = "";
+        String succHash = "";
+
+        try {
+            keyHash =  genHash(selection);
+            currentHash = genHash(current_port);
+            pdHash = genHash(predecessor_port);
+            succHash = genHash(successor_port);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+
+        String cpHash = currentHash;
+        String predHash = pdHash;
+
+
+
+        if (selection.equals("@")){
+            File f = getContext().getFilesDir();
+            File[] folderList = f.listFiles();
+            Log.d("TT", Arrays.toString(folderList));
+
+
+            if (folderList != null) {
+                for (File file : folderList) {
+                    Log.d("Query@", "File is: " + file.getName());
+
+                    //                        FileInputStream input = getContext().openFileInput(file.getName());
+//                        InputStreamReader input_reader = new InputStreamReader(input);
+//                        BufferedReader br = new BufferedReader(input_reader);
+
+                    getContext().deleteFile(file.getName());
+
+//                        Delete the file
+
+                }
+            }
+        }
+
+
+        else if (selection.equals("*")){
+
+            new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "DeleteforAll");
+
+        }
+
+        else {
+
+            if (nodes.size() == 1) {
+                Log.d("Query", "Node Size1");
+
+                try {
+
+//                    FileInputStream input = getContext().openFileInput(selection);
+//                    InputStreamReader input_reader = new InputStreamReader(input);
+//                    BufferedReader br = new BufferedReader(input_reader);
+//
+//                    //Delete the file.
+
+                    getContext().deleteFile(selection);
+
+                } catch (Exception e) {
+
+                }
+
+            }
+
+            else{
+
+                if (((cpHash.compareTo(predHash) > 0 &&
+                        keyHash.compareTo(predHash) > 0 &&
+                        cpHash.compareTo(keyHash) > 0) ||
+                        ((predHash.compareTo(cpHash) > 0) &&
+                                (keyHash.compareTo(predHash) > 0 ||
+                                        cpHash.compareTo(keyHash) > 0)))){
+
+                    try {
+
+//                        FileInputStream input = getContext().openFileInput(selection);
+//                        InputStreamReader input_reader = new InputStreamReader(input);
+//                        BufferedReader br = new BufferedReader(input_reader);
+
+                        //Delete the file.
+
+                        getContext().deleteFile(selection);
+
+                    } catch (Exception e) {
+
+                    }
+
+                }
+
+                else{
+
+                    new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "DeleteKey", selection);
+
+                }
+
+            }
+
+        }
+
         return 0;
     }
 
@@ -156,20 +285,27 @@ public class SimpleDhtProvider extends ContentProvider {
         String filename = (String)values.get("key");
         String string = (String) values.get("value");
         String keyHash ="";
+        String currentHash = "";
+        String pdHash = "";
+        String succHash = "";
 
         try {
             keyHash =  genHash(filename);
+            currentHash = genHash(current_port);
+            pdHash = genHash(predecessor_port);
+            succHash = genHash(successor_port);
+
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
 
-        Log.d("CurrentPort: "+ current_port ,"hash_value:" +hmap.get(current_port));
-        Log.d("predecessorPort: "+ predecessor_port ,"hash_value:" +hmap.get(predecessor_port));
-        Log.d("SuccessorPort: "+ successor_port ,"hash_value:" +hmap.get(successor_port));
+        Log.d("CurrentPort: "+ current_port ,"hash_value:" +currentHash);
+        Log.d("predecessorPort: "+ predecessor_port ,"hash_value:" +pdHash);
+        Log.d("SuccessorPort: "+ successor_port ,"hash_value:" +succHash);
         Log.d("Key: "+ filename ,"hash_value:" + keyHash);
 
-        String cpHash = hmap.get(current_port);
-        String predHash = hmap.get(predecessor_port);
+        String cpHash = currentHash;
+        String predHash = pdHash;
 
         if(nodes.size()==1 || ((cpHash.compareTo(predHash) > 0 &&
                 keyHash.compareTo(predHash) > 0 &&
@@ -210,20 +346,11 @@ public class SimpleDhtProvider extends ContentProvider {
         TelephonyManager tel = (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
         String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
         final String myPort = String.valueOf((Integer.parseInt(portStr) * 2));
-        Log.d(TAG,"This port is: " + myPort);
+        Log.d(TAG,"This port is: " + myPort); //110
         current_port = portStr;
 
         contentProvider = getContext().getContentResolver();
 
-        for(int i = 0; i < remotePort.length;i++){
-            try {
-                String portNum = dividePortNumBy2(remotePort[i]);
-                String hvalue = genHash(portNum);
-                hmap.put(portNum,hvalue);
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace();
-            }
-        }
 
         displayArrayList();
 
@@ -235,19 +362,27 @@ public class SimpleDhtProvider extends ContentProvider {
             //return;
         }
 
-        try {
-            Thread.sleep(6000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+
+
+        addtoArrListandhashSet(current_port);
+        displayArrayList();
+
+        if(!(current_port.equals("5554"))){
+
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Oncreate", current_port);
         }
 
-        new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, "Oncreate", myPort);
-
-        try {
-            Thread.sleep(4000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+//        try {
+//            Thread.sleep(4000);
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
 
         return false;
     }
@@ -256,17 +391,25 @@ public class SimpleDhtProvider extends ContentProvider {
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
         Log.d("Query","Reached the method");
-
-        String cpHash = hmap.get(current_port);
-        String predHash = hmap.get(predecessor_port);
         String keyHash ="";
-        StringBuilder sb;
+        String currentHash = "";
+        String pdHash = "";
+        String succHash = "";
+
 
         try {
             keyHash =  genHash(selection);
+            currentHash = genHash(current_port);
+            pdHash = genHash(predecessor_port);
+            succHash = genHash(successor_port);
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
+
+        String cpHash = currentHash;
+        String predHash = pdHash;
+
+        StringBuilder sb;
 
         if (selection.equals("@")){
             File f = getContext().getFilesDir();
@@ -404,7 +547,8 @@ public class SimpleDhtProvider extends ContentProvider {
                 mco.close();
                 return mco;
 
-            } else {
+            }
+            else {
                 if (((cpHash.compareTo(predHash) > 0 &&
                         keyHash.compareTo(predHash) > 0 &&
                         cpHash.compareTo(keyHash) > 0) ||
@@ -526,20 +670,37 @@ public class SimpleDhtProvider extends ContentProvider {
                     Log.d("Server: Result String",Arrays.toString(result));
 
                     if(result[2].equals("Oncreate")){
-                        Node node1 = new Node (result[1], hmap.get(result[1]), null, null);
-                        nodes.add(node1);
-                        Collections.sort(nodes, new Comparator<Node>() {
-                            @Override
-                            public int compare(Node lhs, Node rhs) {
-                                return lhs.hashValue.compareTo(rhs.hashValue);
-                            }
-                        });
 
-                        assignpd();
-                        displayArrayList();
+                        if (!hashSet.contains(result[1])) {
+                            addtoArrListandhashSet(result[1]);
+                            displayArrayList();
+                        }
+
+                        Iterator iterator = hashSet.iterator();
+
+                        StringBuilder ackToSend = new StringBuilder("Ack");
+
+                        while (iterator.hasNext()) {
+                            ackToSend.append("#");
+                            ackToSend.append(iterator.next());
+                        }
+
+                        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                        out.writeBytes(ackToSend.toString()+"\n");
+                        out.flush();
+
                     }
 
-                    if(result[2].equals("Store")){
+                    else if(result[2].equals("Oncreate2")) {
+
+                        if (!hashSet.contains(result[1])) {
+
+                            addtoArrListandhashSet(result[1]);
+                            displayArrayList();
+                        }
+                    }
+
+                    else if(result[2].equals("Store")){
 
                         String key = result[0];
                         String value = result[1];
@@ -550,7 +711,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         contentProvider.insert(mUri,contentValues1);
                     }
 
-                    if(result[2].equals("Query")){
+                    else if(result[2].equals("Query")){
 
                         Log.d("ServerQuery","ResultArray"+Arrays.toString(result));
                         String[] portnum = new String[1];
@@ -562,7 +723,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                 key, portnum, null);
                     }
 
-                    if(result[2].equals("QueryResult")){
+                    else if(result[2].equals("QueryResult")){
                         String msgString = result[1];
                         try {
                             queue.put(msgString);
@@ -571,7 +732,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         }
                     }
 
-                    if(result[2].equals("QueryforAll")){
+                    else if(result[2].equals("QueryforAll")){
 
                         StringBuilder sb = new StringBuilder();
 
@@ -610,17 +771,31 @@ public class SimpleDhtProvider extends ContentProvider {
 
                     }
 
+
+                    else if(result[2].equals("DeleteforAll")){
+
+                        contentProvider.delete(mUri,
+                                "@",null);
+
+                    }
+
+                    else if(result[2].equals("DeleteKey")){
+
+                        contentProvider.delete(mUri,
+                                result[1],null);
+
+                    }
+
+
                    // in.close();
                     socket.close();
                 }
             }
-            catch (IOException e) {
+            catch (Exception e) {
                 e.printStackTrace();
             }
             return null;
         }
-
-
     }
 
     private class ClientTask extends AsyncTask<String, Void, Void> {
@@ -631,21 +806,80 @@ public class SimpleDhtProvider extends ContentProvider {
                 Log.d("ClientTask", "Reached ClientTask Method " + Arrays.toString(msgs));
 
                 if(msgs[0].equals("Oncreate")){
-                    for (int i = 0; i < remotePort.length; i++) {
+                    try {
 
-                            Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                    Integer.parseInt(remotePort[i]));
+                        Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                Integer.parseInt(REMOTE_PORT0));
 
-                            String msgToSend = "First#" + dividePortNumBy2(msgs[1]) + "#Oncreate";
+                        String msgToSend = "First#" + (msgs[1]) + "#Oncreate";
 
-                            DataOutputStream out =
-                                    new DataOutputStream(socket.getOutputStream());
-                            out.writeBytes(msgToSend+"\n");
-                            out.flush();
-                            out.close();
+                        DataOutputStream out =
+                                new DataOutputStream(socket.getOutputStream());
+
+                        out.writeBytes(msgToSend + "\n");
+                        out.flush();
+
+
+                        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                        String rec_ack = in.readLine();
+
+                        String[] rec_portnums = rec_ack.split("#");
+
+                        if(rec_portnums[0].equals("Ack")){
+
+                            in.close();
                             socket.close();
+
+                            for(int i=1; i<rec_portnums.length;i++){
+
+                                if(!hashSet.contains(rec_portnums[i])){
+
+                                    addtoArrListandhashSet(rec_portnums[i]);
+                                }
+                            }
+
+                            for(int i=1; i<rec_portnums.length;i++){
+
+                                try {
+
+                                    if (rec_portnums[i].equals("5554") || rec_portnums[i].equals(current_port))
+                                        continue;
+
+                                    Socket socket1 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                            Integer.parseInt(multiplyPortNumBy2(rec_portnums[i])));
+
+                                    String msgToSend1 = "Second#" + msgs[1] + "#Oncreate2";
+
+                                    DataOutputStream out1 =
+                                            new DataOutputStream(socket1.getOutputStream());
+
+                                    out1.writeBytes(msgToSend1 + "\n");
+                                    out1.flush();
+                                    out1.close();
+                                    socket1.close();
+
+                                }
+                                catch (Exception e){
+
+                                }
+                            }
+                        }
+
+                        else if (rec_ack == null || rec_ack.isEmpty()) {
+                            in.close();
+                            socket.close();
+                            throw new NullPointerException();
+                        }
+                           // out.close();
+
+                       // socket.close();
+
+                    }
+                    catch (Exception e) {
+
                     }
                 }
+
 
                 if(msgs[0].equals("Store")) {
 
@@ -723,6 +957,46 @@ public class SimpleDhtProvider extends ContentProvider {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
+
+                }
+
+
+                if(msgs[0].equals("DeleteforAll")){
+
+                    for(int i=0; i<nodes.size(); i++){
+
+                        Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                Integer.parseInt(multiplyPortNumBy2(nodes.get(i).portNumber)));
+
+                        String msgToSend = "Sixth#" + current_port +"#DeleteforAll";
+
+                        DataOutputStream out =
+                                new DataOutputStream(socket.getOutputStream());
+
+                        out.writeBytes(msgToSend+"\n");
+                        out.flush();
+                        out.close();
+
+                        socket.close();
+
+                    }
+
+                }
+
+
+                if(msgs[0].equals("DeleteKey")){
+
+                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                            Integer.parseInt(multiplyPortNumBy2(successor_port)));
+
+                    String msgToSend = "Seventh#" + msgs[1] +"#DeleteKey";
+
+                    DataOutputStream out =
+                            new DataOutputStream(socket.getOutputStream());
+
+                    out.writeBytes(msgToSend+"\n");
+                    out.flush();
+                    out.close();
 
                 }
 
